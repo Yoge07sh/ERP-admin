@@ -11,7 +11,9 @@ import {
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { FaArrowLeft, FaClipboardCheck } from "react-icons/fa";
+import { FaArrowLeft, FaClipboardCheck, FaFilePdf } from "react-icons/fa";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -64,7 +66,6 @@ function AttendanceRegisterView() {
       };
 
       try {
-        // Use the separate E-Attendance Register APIs.
         const [studentResponse, attendanceResponse] = await Promise.all([
           axios.get(`${apiUrl}/e-attendance/students`, {
             ...config,
@@ -104,7 +105,7 @@ function AttendanceRegisterView() {
     fetchRegister();
   }, [mappingId, fromDate, toDate, token, navigate]);
 
-  // Every saved attendance record is one lecture column.
+  // Each saved attendance record represents one lecture column.
   const sessions = useMemo(
     () =>
       records.map((record, index) => ({
@@ -157,6 +158,94 @@ function AttendanceRegisterView() {
     return { present, absent };
   }, [rows]);
 
+  // Generate and download the attendance register as a PDF.
+  const generatePDF = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+      });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("Attendance Register", 148.5, 12, {
+        align: "center",
+      });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Date Range: ${fromDate} to ${toDate}`, 148.5, 19, {
+        align: "center",
+      });
+
+      const headers = [
+        "Roll No.",
+        "Student Name",
+        ...sessions.map((session) => session.label),
+        "Total Days",
+        "Present Days",
+        "Percentage",
+      ];
+
+      const body = rows.map((row) => [
+        row.student.rollNumber ?? row.student.rollNo ?? "N/A",
+        getStudentName(row.student),
+        ...row.statuses,
+        row.present + row.absent,
+        row.present,
+        row.percentage === null ? "N/A" : `${row.percentage}%`,
+      ]);
+
+      autoTable(doc, {
+        head: [headers],
+        body,
+        startY: 25,
+        theme: "grid",
+        styles: {
+          font: "helvetica",
+          fontSize: 7,
+          cellPadding: 1.5,
+          overflow: "linebreak",
+          valign: "middle",
+        },
+        headStyles: {
+          fillColor: [41, 70, 110],
+          textColor: 255,
+          halign: "center",
+          fontStyle: "bold",
+        },
+        columnStyles: {
+          0: { cellWidth: 18 },
+          1: { cellWidth: 35 },
+        },
+        margin: {
+          top: 25,
+          left: 8,
+          right: 8,
+          bottom: 12,
+        },
+        horizontalPageBreak: true,
+        horizontalPageBreakRepeat: [0, 1],
+        didDrawPage: () => {
+          const pageNumber = doc.internal.getCurrentPageInfo().pageNumber;
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+
+          doc.setFontSize(8);
+          doc.text(`Page ${pageNumber}`, pageWidth - 8, pageHeight - 5, {
+            align: "right",
+          });
+        },
+      });
+
+      doc.save(`Attendance_Register_${fromDate}_to_${toDate}.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      setError("Failed to generate the PDF. Please try again.");
+    }
+  };
+
   if (loading) {
     return (
       <Container className="py-5 text-center">
@@ -168,10 +257,9 @@ function AttendanceRegisterView() {
 
   return (
     <Container fluid className="py-4 px-3 px-md-4">
-      <div className="position-relative d-flex align-items-center justify-content-center mb-4">
+      <div className="d-flex align-items-center justify-content-between gap-2 mb-4">
         <Button
           variant="outline-secondary"
-          className="position-absolute start-0"
           onClick={() => navigate("/attendance-register")}
         >
           <FaArrowLeft className="me-2" />
@@ -188,115 +276,122 @@ function AttendanceRegisterView() {
             {fromDate} to {toDate}
           </div>
         </div>
+
+        <Button
+          variant="primary"
+          onClick={generatePDF}
+          disabled={!!error || students.length === 0 || sessions.length === 0}
+        >
+          <FaFilePdf className="me-2" />
+          Generate PDF
+        </Button>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
 
       {!error && (
-        <>
-          <Card className="border-0 shadow-sm">
-            <Card.Body>
-              <h5 className="mb-3">Student Attendance Details</h5>
+        <Card className="border-0 shadow-sm">
+          <Card.Body>
+            <h5 className="mb-3">Student Attendance Details</h5>
 
-              {students.length === 0 ? (
-                <Alert variant="info">
-                  No active students found for this class.
-                </Alert>
-              ) : sessions.length === 0 ? (
-                <Alert variant="info">
-                  No attendance records were found for this date range.
-                </Alert>
-              ) : (
-                <div className="table-responsive" style={{ maxHeight: "70vh" }}>
-                  <Table bordered hover size="sm" className="align-middle mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th style={{ minWidth: 100 }}>Roll No.</th>
-                        <th style={{ minWidth: 180 }}>Student Name</th>
+            {students.length === 0 ? (
+              <Alert variant="info">
+                No active students found for this class.
+              </Alert>
+            ) : sessions.length === 0 ? (
+              <Alert variant="info">
+                No attendance records were found for this date range.
+              </Alert>
+            ) : (
+              <div className="table-responsive" style={{ maxHeight: "70vh" }}>
+                <Table bordered hover size="sm" className="align-middle mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th style={{ minWidth: 100 }}>Roll No.</th>
+                      <th style={{ minWidth: 180 }}>Student Name</th>
 
-                        {sessions.map((session) => (
-                          <th
-                            key={session.columnKey}
-                            style={{ minWidth: 105 }}
+                      {sessions.map((session) => (
+                        <th
+                          key={session.columnKey}
+                          style={{ minWidth: 105 }}
+                          className="text-center"
+                        >
+                          {session.label}
+                        </th>
+                      ))}
+
+                      <th className="text-center">Total Days</th>
+                      <th className="text-center">Present Days</th>
+                      <th style={{ minWidth: 105 }}>Percentage</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={String(row.student._id)}>
+                        <td>
+                          {row.student.rollNumber ??
+                            row.student.rollNo ??
+                            "N/A"}
+                        </td>
+
+                        <td>{getStudentName(row.student)}</td>
+
+                        {row.statuses.map((status, index) => (
+                          <td
+                            key={sessions[index].columnKey}
                             className="text-center"
                           >
-                            {session.label}
-                          </th>
+                            {status === "P" ? (
+                              <Badge bg="success">P</Badge>
+                            ) : status === "A" ? (
+                              <Badge bg="danger">A</Badge>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
                         ))}
 
-                        <th className="text-center">Total Days</th>
-                        <th className="text-center">Present Days</th>
-                        <th style={{ minWidth: 105 }}>Percentage</th>
+                        <td className="text-center">
+                          {row.present + row.absent}
+                        </td>
+
+                        <td className="text-center">{row.present}</td>
+
+                        <td className="text-center">
+                          <Badge
+                            bg={
+                              row.percentage === null
+                                ? "secondary"
+                                : Number(row.percentage) >= 75
+                                  ? "success"
+                                  : "warning"
+                            }
+                            text={
+                              row.percentage !== null &&
+                              Number(row.percentage) < 75
+                                ? "dark"
+                                : undefined
+                            }
+                          >
+                            {row.percentage === null
+                              ? "N/A"
+                              : `${row.percentage}%`}
+                          </Badge>
+                        </td>
                       </tr>
-                    </thead>
-
-                    <tbody>
-                      {rows.map((row) => (
-                        <tr key={String(row.student._id)}>
-                          <td>
-                            {row.student.rollNumber ??
-                              row.student.rollNo ??
-                              "N/A"}
-                          </td>
-
-                          <td>{getStudentName(row.student)}</td>
-
-                          {row.statuses.map((status, index) => (
-                            <td
-                              key={sessions[index].columnKey}
-                              className="text-center"
-                            >
-                              {status === "P" ? (
-                                <Badge bg="success">P</Badge>
-                              ) : status === "A" ? (
-                                <Badge bg="danger">A</Badge>
-                              ) : (
-                                <span className="text-muted">—</span>
-                              )}
-                            </td>
-                          ))}
-
-                          <td className="text-center">
-                            {row.present + row.absent}
-                          </td>
-
-                          <td className="text-center">{row.present}</td>
-
-                          <td className="text-center">
-                            <Badge
-                              bg={
-                                row.percentage === null
-                                  ? "secondary"
-                                  : Number(row.percentage) >= 75
-                                    ? "success"
-                                    : "warning"
-                              }
-                              text={
-                                row.percentage !== null &&
-                                Number(row.percentage) < 75
-                                  ? "dark"
-                                  : undefined
-                              }
-                            >
-                              {row.percentage === null
-                                ? "N/A"
-                                : `${row.percentage}%`}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              )}
-
-              <div className="text-muted small mt-3">
-                Percentage = Present ÷ (Present + Absent) × 100. Unmarked
-                student entries are excluded.
+                    ))}
+                  </tbody>
+                </Table>
               </div>
-            </Card.Body>
-          </Card>
-        </>
+            )}
+
+            <div className="text-muted small mt-3">
+              Percentage = Present ÷ (Present + Absent) × 100. Unmarked student
+              entries are excluded.
+            </div>
+          </Card.Body>
+        </Card>
       )}
     </Container>
   );
