@@ -176,7 +176,14 @@ function Sidebar({ isOpen, onClose }) {
                   <span>Mark Attendance</span>
                 </ListGroup.Item>
 
-                
+                <ListGroup.Item
+                  as={NavLink}
+                  to="/attendance-register"
+                  className="sidebar-menu-item d-flex align-items-center gap-2"
+                >
+                  <i className="bi bi-clipboard-check"></i>
+                  <span>Register</span>
+                </ListGroup.Item>
               </>
             )}
 

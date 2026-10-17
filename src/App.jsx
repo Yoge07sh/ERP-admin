@@ -58,6 +58,8 @@ import AttendanceRegister from "./pages/Attendance/AttendanceRegister";
 import Eregister from "./pages/Attendance/Eregister";
 import AttendanceSummary from "./pages/Attendance/AttendanceSummary";
 import MyAttendance from "./pages/Attendance/MyAttendance";
+import AttendanceRegisterView from "./pages/Attendance/AttendanceRegisterView";
+import AttendanceRegisterForm from "./pages/Attendance/AttendanceREgisterform";
 
 function AppContent() {
   const location = useLocation();
@@ -167,6 +169,15 @@ function AppContent() {
           element={<AttendanceSummary />}
         ></Route>
         <Route path="/student/attendance" element={<MyAttendance />} />
+        <Route
+          path="/attendance-register"
+          element={<AttendanceRegisterForm/>}
+        />
+
+        <Route
+          path="/attendance-register/view"
+          element={<AttendanceRegisterView/>}
+        />
       </Routes>
     </AdminLayout>
   );
